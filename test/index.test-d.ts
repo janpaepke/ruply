@@ -157,3 +157,14 @@ expectType<Promise<number>>(apply(aNumber, doNothing, asyncIncrement));
 expectType<Promise<number>>(apply(aNumeralPromise, doNothing, increment));
 // apply with a callback which is only sometimes asynchronous.
 expectType<number | Promise<number>>(apply(aNumber, increment, maybeAsyncIncrement));
+// runIf with a callback which can never be reached, because a preceding step is always null-ish.
+expectType<null>(runIf(null, asyncConvertNumberToString));
+expectType<undefined>(runIf(undefined, asyncConvertNumberToString));
+expectType<null>(runIf(aNumber, returnNull, asyncConvertNumberToString));
+expectType<undefined>(runIf(aNumber, returnUndefined, asyncConvertNumberToString));
+expectType<null>(runIf(aNumberOrNull, returnNull, asyncConvertNumberToString));
+expectType<Promise<null>>(runIf(aNumeralPromise, returnNull, asyncConvertNumberToString));
+expectType<Promise<null>>(runIf(aNumber, asyncReturnNull, asyncConvertNumberToString));
+expectType<null>(runIf(aNumber, increment, returnNull, increment, asyncConvertNumberToString));
+// runIf with a callback which can be reached, because a preceding step is only sometimes null-ish.
+expectType<Promise<string> | null>(runIf(aNumber, returnNumberOrNull, asyncConvertNumberToString));
