@@ -18,25 +18,53 @@ type ExcludeAsynchronous<T, U> = T extends Promise<infer A> ? A extends U ? neve
  */
 type ExtractAsynchronous<T, U> = T extends Promise<infer A> ? A extends U ? Promise<A> : never : T extends U ? T : never;
 /**
- * If `U` is a `Promise` and `T` is not a `Promise`, a `Promise` which resolves to values of type `T`. If `U` is
- * `never` (there is no value from which `T` could be reached), `never`. Otherwise `T` itself.
+ * The type which results from passing values of type `U` on to a step which results in `T`:
+ * - If `U` is `Thrown`, `Thrown`: the step is never taken.
+ * - If `U` is `never` (there is no value from which the step is taken), `never`.
+ * - If `U` is a `Promise`, `T` made asynchronous: `Promise<never>` if `T` is `Thrown` (the promise rejects), `T` itself
+ *   if `T` is a `Promise`, and a `Promise` which resolves to values of type `T` otherwise.
+ * - Otherwise `T` itself.
  */
-type TransferAsynchronicity<U, T> = U extends Promise<any> ? T extends Promise<any> ? T : Promise<T> : T;
+type TransferAsynchronicity<U, T> =
+	U extends Thrown ? Thrown
+	: U extends Promise<any> ? T extends Thrown ? Promise<never> : T extends Promise<any> ? T : Promise<T>
+	: T;
 /**
- * `TransferAsynchronicity` applied for every type in the tuple `U`: if any type in `U` is a `Promise` and `T` is not a
- * `Promise`, a `Promise` which resolves to values of type `T`. If any type in `U` is `never`, `never`. Otherwise `T`
- * itself.
+ * Stands in for the result of a callback which always throws, so it can be told apart from other occurrences of
+ * `never` (such as a value which can never be reached). Never part of a resulting type.
  */
-type Chain<U extends Array<unknown>, T> =
-	U extends [infer A, ...infer B] ? TransferAsynchronicity<A, Chain<B, T>> : T;
+declare class Thrown {
+	private readonly thrown: never;
+}
+/**
+ * `Thrown` if `T` is `never`. Otherwise `T` itself.
+ */
+type MarkThrown<T> = [T] extends [never] ? Thrown : T;
+/**
+ * `T` without `Thrown`.
+ */
+type UnmarkThrown<T> = Exclude<T, Thrown>;
+/**
+ * `T` without `Promise<never>` if `T` includes other promises: a promise which always rejects adds nothing to a union
+ * which is asynchronous anyway.
+ */
+type DropRedundantRejection<T> =
+	[Extract<Exclude<T, Promise<never>>, Promise<any>>] extends [never] ? T : Exclude<T, Promise<never>>;
+/**
+ * The type which results from passing values through the steps `U` on to a final step which results in `T`.
+ */
+type Chain<U extends Array<unknown>, T> = DropRedundantRejection<UnmarkThrown<ChainSteps<U, T>>>;
+type ChainSteps<U extends Array<unknown>, T> =
+	U extends [infer A, ...infer B] ? TransferAsynchronicity<MarkThrown<A>, ChainSteps<B, T>> : MarkThrown<T>;
 /**
  * Like `Chain`, except that a null-ish value ends the chain: it becomes part of the result, and only non-null-ish values
  * are passed on to the next step.
  */
-type ChainUntilNullish<U extends Array<unknown>, T> =
+type ChainUntilNullish<U extends Array<unknown>, T> = DropRedundantRejection<UnmarkThrown<ChainUntilNullishSteps<U, T>>>;
+type ChainUntilNullishSteps<U extends Array<unknown>, T> =
 	U extends [infer A, ...infer B]
-		? ExtractAsynchronous<A, Nullish> | TransferAsynchronicity<ExcludeAsynchronous<A, Nullish>, ChainUntilNullish<B, T>>
-		: T;
+		? ExtractAsynchronous<A, Nullish> | TransferAsynchronicity<ExcludeAsynchronous<MarkThrown<A>, Nullish>, ChainUntilNullishSteps<B, T>>
+		: MarkThrown<T>;
 /**
  * Calls the passed callback, forwarding the first argument and routing back whatever is returned.
  *
@@ -58,7 +86,7 @@ type ChainUntilNullish<U extends Array<unknown>, T> =
  * If multiple callbacks are passed, they are called subsequently. `run(x, a, b)` is equivalent to `run(run(x, a), b)`.
  */
 declare function run<T, R, C>(this: C, value: T, callback: (this: C, value: Resolve<T>) => R):
-	TransferAsynchronicity<T, R>;
+	Chain<[T], R>;
 declare function run<T, Z, R, C>(this: C, value: T, ...callbacks: [(this: C, value: Resolve<T>) => Z, (this: C, value: Resolve<Z>) => R]):
 	Chain<[T, Z], R>;
 declare function run<T, Z, Y, R, C>(this: C, value: T, ...callbacks: [(this: C, value: Resolve<T>) => Z, (this: C, value: Resolve<Z>) => Y, (this: C, value: Resolve<Y>) => R]):
@@ -121,10 +149,10 @@ declare function runIf<T, Z, Y, X, W, R, C>(this: C, value: T, ...callbacks: [(t
  * `apply(apply(x, a), b)`.
  */
 declare function apply<T, Z, C>(this: C, value: T, callback: (this: C, value: Resolve<T>) => Z):
-	TransferAsynchronicity<Z, T>;
+	Chain<[T, Z], T>;
 // ↑ This overload is not strictly necessary. The one below is a generalised form of it.
 declare function apply<T, U extends Array<(this: C, value: Resolve<T>) => any>, C>(this: C, value: T, ...callbacks: U):
-	Chain<ReturnTypes<U>, T>;
+	Chain<[T, ...ReturnTypes<U>], T>;
 
 export {
 	run, runIf,

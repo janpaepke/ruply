@@ -20,6 +20,7 @@ const asyncReturnNumberOrNull = async (value: number) => value > 0 ? value : nul
 const maybeAsyncIncrement = (value: number) => value > 0 ? value + 1 : Promise.resolve(value + 1);
 const getLength = (value: string) => value.length;
 const doNothing = (value: number) => {};
+const throwError = (value: number) => { throw new Error(); };
 // run with one callback.
 expectType<string>(run(aNumber, convertNumberToString));
 expectType<Promise<string>>(run(aNumeralPromise, convertNumberToString));
@@ -168,3 +169,27 @@ expectType<Promise<null>>(runIf(aNumber, asyncReturnNull, asyncConvertNumberToSt
 expectType<null>(runIf(aNumber, increment, returnNull, increment, asyncConvertNumberToString));
 // runIf with a callback which can be reached, because a preceding step is only sometimes null-ish.
 expectType<Promise<string> | null>(runIf(aNumber, returnNumberOrNull, asyncConvertNumberToString));
+// Callbacks which always throw: the error is thrown if the chain is synchronous up to that point, and rejects the
+// returned promise if it is asynchronous. Subsequent callbacks are skipped.
+expectType<never>(run(aNumber, throwError));
+expectType<never>(run(aNumber, increment, throwError, increment));
+expectType<never>(run(aNumber, throwError, asyncIncrement));
+expectType<Promise<never>>(run(aNumeralPromise, throwError));
+expectType<Promise<never>>(run(aNumeralPromise, increment, throwError));
+expectType<Promise<never>>(run(aNumber, asyncIncrement, throwError));
+expectType<Promise<never>>(run(aNumber, asyncIncrement, throwError, asyncIncrement));
+expectType<Promise<never>>(run(aNumberOrNumeralPromise, throwError));
+expectType<never>(runIf(aNumber, throwError));
+expectType<never>(runIf(aNumber, throwError, asyncConvertNumberToString));
+expectType<null>(runIf(aNumberOrNull, throwError));
+expectType<null>(runIf(aNumberOrNull, throwError, convertNumberToString));
+expectType<Promise<never>>(runIf(aNumeralPromise, throwError));
+expectType<Promise<never>>(runIf(aNumber, asyncIncrement, throwError));
+expectType<Promise<never>>(runIf(aNumeralPromise, throwError, asyncConvertNumberToString));
+expectType<Promise<never> | null>(runIf(aNumeralPromiseOrNull, throwError));
+expectType<Promise<null>>(runIf(aNumeralOrNullPromise, throwError));
+expectType<never>(apply(aNumber, throwError));
+expectType<never>(apply(aNumber, increment, throwError));
+expectType<never>(apply(aNumber, throwError, asyncIncrement));
+expectType<Promise<never>>(apply(aNumeralPromise, throwError));
+expectType<Promise<never>>(apply(aNumber, asyncIncrement, throwError));
